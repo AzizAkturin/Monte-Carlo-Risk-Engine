@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import argparse
 import numpy as np
+from pathlib import Path
 from src.data.binance import load_binance_price_data
 from src.simulation.monte_carlo import MCConfig, simulate_correlated_returns, portfolio_path_pnl
 from src.reporting.risk import compute_risk_metrics
+from src.reporting.visualize import plot_simulation_paths, plot_pnl_distribution, plot_risk_dashboard
 
 
 def parse_args():
@@ -16,6 +18,9 @@ def parse_args():
     p.add_argument("--paths", type=int, default=20000, help="Number of Monte Carlo paths")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
     p.add_argument("--initial", type=float, default=1.0, help="Initial portfolio value")
+    p.add_argument("--plot", action="store_true", help="Show visualization plots")
+    p.add_argument("--dashboard", action="store_true", help="Show full risk dashboard")
+    p.add_argument("--save", type=str, default=None, help="Save plots to directory (e.g., ./reports)")
     return p.parse_args()
 
 
@@ -46,6 +51,47 @@ def main():
     print(f"VaR 99%:  {metrics.var_99:.4f}")
     print(f"CVaR 99%: {metrics.cvar_99:.4f}")
     print("====================================\n")
+
+    # Compute portfolio value paths for visualization
+    port_log_ret = sim @ w
+    gross = np.exp(port_log_ret)
+    portfolio_values = args.initial * np.cumprod(gross, axis=1)
+
+    # Generate visualizations if requested
+    if args.dashboard:
+        save_path = Path(args.save) / "dashboard.png" if args.save else None
+        plot_risk_dashboard(
+            simulation_df=portfolio_values,
+            pnl=pnl,
+            var_95=metrics.var_95,
+            cvar_95=metrics.cvar_95,
+            var_99=metrics.var_99,
+            cvar_99=metrics.cvar_99,
+            initial_value=args.initial,
+            save_path=save_path,
+            show=True,
+        )
+    elif args.plot:
+        # Individual plots
+        if args.save:
+            Path(args.save).mkdir(parents=True, exist_ok=True)
+        
+        plot_simulation_paths(
+            simulation_df=portfolio_values,
+            initial_value=args.initial,
+            save_path=Path(args.save) / "simulation_paths.png" if args.save else None,
+            show=True,
+        )
+        
+        plot_pnl_distribution(
+            pnl=pnl,
+            var_95=metrics.var_95,
+            cvar_95=metrics.cvar_95,
+            var_99=metrics.var_99,
+            cvar_99=metrics.cvar_99,
+            save_path=Path(args.save) / "pnl_distribution.png" if args.save else None,
+            show=True,
+        )
 
 
 if __name__ == "__main__":
