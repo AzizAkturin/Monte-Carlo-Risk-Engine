@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "ndarray": "^1.0.19",
-    "numpy": "^0.0.1"
-  }
-}

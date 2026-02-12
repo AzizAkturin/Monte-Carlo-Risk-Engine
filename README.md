@@ -1,6 +1,6 @@
 # 🎲 Monte Carlo Risk Engine
 
-A Python-based Monte Carlo simulation tool for portfolio risk analysis. Simulates correlated multi-asset price paths and generates comprehensive risk reports (VaR/CVaR, drawdown analysis, probability of loss).
+A professional Python-based Monte Carlo simulation tool for cryptocurrency portfolio risk analysis. Simulates correlated multi-asset price paths and generates comprehensive risk reports with interactive visualizations.
 
 ## 🎯 Core Components
 
@@ -15,6 +15,9 @@ A Python-based Monte Carlo simulation tool for portfolio risk analysis. Simulate
 ### Installation
 
 ```bash
+# Clone or download the repository
+cd Monte-Carlo-Risk-Engine
+
 # Activate virtual environment
 source .venv/bin/activate
 
@@ -22,64 +25,59 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Basic Usage
+### Run Analysis
 
 ```bash
-# Run with defaults (BTC & ETH, 20k paths, 20-day horizon)
-python -m src.main
-
-# Run with visualization
-python -m src.main --plot
-
-# Full risk dashboard
-python -m src.main --dashboard
-
-# Custom parameters
-python -m src.main --tickers BTCUSDT ETHUSDT SOLUSDT --paths 50000 --days 30 --dashboard
-
-# Save plots to disk
-python -m src.main --dashboard --save ./reports
+# Run portfolio analysis (SOL, ETH, BTC, USDC)
+python run_analysis.py
 ```
 
-### Run the Example
-
-```bash
-python example.py
-```
+This will:
+1. Fetch 1 year of historical data from Binance
+2. Run 20,000 Monte Carlo simulations over 30 days
+3. Calculate comprehensive risk metrics
+4. Generate an interactive dashboard
+5. Save results to `reports/` folder
 
 ## 📊 Features
 
-### Current Implementation (MVP)
-- ✅ Multi-asset correlation modeling using Cholesky decomposition
-- ✅ Monte Carlo simulation with configurable paths and horizons
-- ✅ Value at Risk (VaR) at 95% and 99% confidence levels
-- ✅ Conditional VaR / Expected Shortfall (CVaR)
-- ✅ Interactive visualizations (fan charts, P&L distributions, risk dashboards)
-- ✅ Real-time data from Binance API with rate limiting
-- ✅ Drawdown analysis
+- ✅ **Multi-Asset Correlation** - Cholesky decomposition for realistic correlation modeling
+- ✅ **Monte Carlo Simulation** - 20,000+ paths with configurable horizons
+- ✅ **Risk Metrics** - VaR, CVaR at 95% and 99% confidence levels
+- ✅ **Drawdown Analysis** - Peak-to-trough risk measurement
+- ✅ **Interactive Dashboard** - 6-panel visualization with clear explanations
+- ✅ **Real-Time Data** - Binance API integration with rate limiting
+- ✅ **Professional Reports** - Auto-generated analysis reports
 
-### Roadmap
-- 🔲 Regime switching (bull/bear/sideways markets)
-- 🔲 Backtesting framework
-- 🔲 Custom weight allocation strategies
-- 🔲 Additional risk metrics (Sharpe ratio, Sortino ratio)
-- 🔲 Web dashboard interface
+## 🔧 Customization
 
-## 📖 Documentation
+Edit `run_analysis.py` to customize:
 
-### Command-Line Options
+**Portfolio Assets:**
+```python
+tickers = ["SOLUSDT", "ETHUSDT", "BTCUSDT", "USDCUSDT"]
+token_names = ["Solana", "Ethereum", "Bitcoin", "USDC"]
+```
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--tickers` | BTCUSDT ETHUSDT | Space-separated Binance symbols |
-| `--days_back` | 730 | Historical data lookback period (days) |
-| `--days` | 20 | Simulation horizon (days forward) |
-| `--paths` | 20000 | Number of Monte Carlo paths |
-| `--initial` | 1.0 | Initial portfolio value |
-| `--seed` | 42 | Random seed for reproducibility |
-| `--plot` | False | Show individual plots |
-| `--dashboard` | False | Show comprehensive risk dashboard |
-| `--save` | None | Directory to save plots (e.g., `./reports`) |
+**Initial Investment:**
+```python
+initial_value = 10000.0  # $10,000 portfolio
+```
+
+**Simulation Parameters:**
+```python
+config = MCConfig(
+    horizon_days=30,    # 30-day forecast
+    n_paths=20000,      # 20,000 simulations  
+    seed=42
+)
+```
+
+**Weight Allocation:**
+```python
+weights = np.array([0.25, 0.25, 0.25, 0.25])  # Equal weight
+# or custom: [0.40, 0.30, 0.20, 0.10]  # 40% SOL, 30% ETH, etc.
+```
 
 ### Project Structure
 
@@ -87,54 +85,62 @@ python example.py
 Monte-Carlo-Risk-Engine/
 ├── src/
 │   ├── data/
-│   │   ├── binance.py      # Binance API integration
-│   │   └── prices.py       # yFinance backup (optional)
+│   │   ├── binance.py       # Binance API integration
+│   │   └── prices.py        # yFinance fallback
 │   ├── simulation/
-│   │   └── monte_carlo.py  # Path simulation engine
+│   │   └── monte_carlo.py   # Monte Carlo engine
 │   └── reporting/
-│       ├── risk.py         # VaR/CVaR calculations
-│       └── visualize.py    # Plotting functions
-├── example.py              # Quick demo of all 5 components
-├── requirements.txt        # Python dependencies
-└── README.md              # This file
+│       ├── risk.py          # Risk metrics (VaR/CVaR)
+│       └── visualize.py     # Dashboard generation
+├── reports/                 # Output folder
+│   ├── portfolio_dashboard.png
+│   └── portfolio_analysis.txt
+├── run_analysis.py          # Main analysis script
+├── requirements.txt
+└── README.md
 ```
 
-## 🎨 Visualization Examples
+## 📊 Output
 
-The tool generates several types of visualizations:
+### Dashboard Components
 
-1. **Simulation Paths (Fan Chart)** - Shows all simulated price trajectories
-2. **P&L Distribution** - Histogram with VaR/CVaR markers
-3. **Percentile Bands** - 5th, 25th, 50th, 75th, 95th percentile paths
-4. **Risk Dashboard** - Comprehensive 6-panel risk analysis
-5. **Drawdown Distribution** - Maximum drawdown across all paths
+1. **📈 Simulation Paths** - Visual fan chart showing possible futures
+2. **💰 P&L Distribution** - Histogram of final outcomes with risk thresholds
+3. **📊 Percentile Scenarios** - Best to worst case trajectories
+4. **⚠️ Risk Metrics Table** - Key risk numbers with explanations
+5. **📉 Drawdown Analysis** - Maximum drop from peak analysis
 
-## 📝 Example Output
+### Files Generated
 
-```
-=== Monte Carlo Risk Engine (MVP) ===
-Tickers: BTCUSDT, ETHUSDT
-Paths: 20,000 | Horizon: 20 days
-VaR 95%:  0.1234
-CVaR 95%: 0.1567
-VaR 99%:  0.2134
-CVaR 99%: 0.2456
-====================================
-```
+- `reports/portfolio_dashboard.png` - Interactive risk dashboard
+- `reports/portfolio_analysis.txt` - Detailed metrics report
 
-## 🛠️ Technology Stack
+## 🛠️ Tech Stack
 
-- **Python 3.13+**
-- **NumPy** - Matrix operations and Cholesky decomposition
+- **Python 3.11+** - Core language
+- **NumPy** - Monte Carlo simulations & matrix operations
 - **Pandas** - Time series data handling
-- **Matplotlib** - Visualization
-- **SciPy** - Statistical functions
-- **Requests** - Binance API calls
+- **Matplotlib** - Professional visualizations
+- **Requests** - Binance API integration
+
+## 📚 Understanding the Output
+
+**VaR (Value at Risk)** - The maximum loss at a given confidence level  
+*VaR 95% = $2,327 means: "95% confident you won't lose more than $2,327"*
+
+**CVaR (Conditional VaR)** - Average loss in worst-case scenarios  
+*CVaR 95% = $2,760 means: "If you're in the worst 5%, expect $2,760 loss on average"*
+
+**Probability of Loss** - Chance the portfolio loses money  
+*58.47% means: "More than half the simulations ended with a loss"*
+
+**Drawdown** - Maximum drop from the highest point  
+*26% drawdown means: "Portfolio dropped 26% from its peak"*
 
 ## 📄 License
 
-MIT License - See [LICENSE](LICENSE) file for details.
+MIT License - See [LICENSE](LICENSE) for details.
 
 ---
 
-**Goal**: Build a production-grade risk management tool for crypto portfolios using Monte Carlo methods.
+**Built for professional crypto portfolio risk analysis using Monte Carlo simulation**
