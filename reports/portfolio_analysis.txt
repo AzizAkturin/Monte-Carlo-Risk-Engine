@@ -1,0 +1,16 @@
+============================================================
+PORTFOLIO RISK ANALYSIS
+============================================================
+
+Tokens: Solana, Ethereum, Bitcoin, USDC (Stablecoin)
+Data points: 364 days
+Simulation: 20,000 paths, 30 days
+
+RISK METRICS
+------------------------------------------------------------
+VaR 95%:  $2326.2286
+CVaR 95%: $2758.9882
+VaR 99%:  $3035.8572
+CVaR 99%: $3350.3667
+Mean P&L: $-210.7058
+Prob(Loss): 58.40%
