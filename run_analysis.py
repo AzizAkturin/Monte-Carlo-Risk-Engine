@@ -80,7 +80,7 @@ def main():
         print(f"     {token:12s}: {weight:.2%}")
     
     print("\n4️⃣  Running Monte Carlo simulation...")
-    initial_value = 10000.0
+    initial_value = 100000.0
     config = MCConfig(horizon_days=30, n_paths=20000, seed=42)
     sim = simulate_correlated_returns(mu=mu, cov=cov, config=config)
     pnl = portfolio_path_pnl(sim, weights=weights, initial_value=initial_value)
