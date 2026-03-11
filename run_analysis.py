@@ -12,8 +12,8 @@ matplotlib.use('Agg')  # Use non-interactive backend to avoid display issues
 
 from src.data.binance import load_binance_price_data, compute_ewma_params
 from src.simulation.monte_carlo import MCConfig, simulate_correlated_returns, portfolio_path_pnl
-from src.reporting.risk import compute_risk_metrics
-from src.reporting.visualize import plot_risk_dashboard, plot_regime_comparison
+from src.reporting.risk import compute_risk_metrics, compute_rolling_var
+from src.reporting.visualize import plot_risk_dashboard, plot_regime_comparison, plot_rolling_var
 
 
 def main():
@@ -152,7 +152,16 @@ def main():
         f.write(f"Mean P&L: ${pnl.mean():+.4f}\n")
         f.write(f"Prob(Loss): {(pnl < 0).mean():.2%}\n")
     
-    print("\n6️⃣  Generating visualizations...")
+    print("\n6️⃣  Computing rolling VaR history...")
+    rolling_var = compute_rolling_var(
+        returns=rets,
+        weights=weights,
+        window=60,
+        horizon_days=config.horizon_days,
+        initial_value=initial_value,
+    )
+
+    print("7️⃣  Generating visualizations...")
     # Compute portfolio value paths for visualization
     port_log_ret = sim @ weights
     gross = np.exp(port_log_ret)
@@ -167,6 +176,17 @@ def main():
         cvar_99=metrics.cvar_99,
         initial_value=initial_value,
         save_path="reports/portfolio_dashboard.png",
+        show=False,
+    )
+
+    plot_rolling_var(
+        rolling_var=rolling_var,
+        current_var_95=metrics.var_95,
+        current_var_99=metrics.var_99,
+        window=60,
+        horizon_days=config.horizon_days,
+        initial_value=initial_value,
+        save_path="reports/rolling_var.png",
         show=False,
     )
 
@@ -194,6 +214,7 @@ def main():
     print(f"   📁 Results saved to: reports/portfolio_analysis.txt")
     print(f"   📊 Dashboard saved to: reports/portfolio_dashboard.png")
     print(f"   📊 Regime comparison saved to: reports/regime_comparison.png")
+    print(f"   📈 Rolling VaR chart saved to: reports/rolling_var.png")
 
 
 if __name__ == "__main__":

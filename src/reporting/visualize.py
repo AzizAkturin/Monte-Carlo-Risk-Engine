@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import matplotlib.ticker as mtick
 import numpy as np
+import pandas as pd
 from pathlib import Path
+
+# Known crypto market stress events shown as annotations on the rolling VaR chart
+_CRASH_EVENTS: list[tuple[str, str]] = [
+    ("2022-01-21", "Crypto\nWinter"),
+    ("2022-05-09", "Luna\nCrash"),
+    ("2022-11-08", "FTX\nCollapse"),
+    ("2024-08-05", "Yen Carry\nUnwind"),
+]
 
 
 def plot_simulation_paths(
@@ -189,14 +199,10 @@ def plot_risk_dashboard(
                   fontsize=14, fontweight='bold', pad=15)
     ax1.legend(loc='upper left', fontsize=10, framealpha=0.9)
     ax1.grid(True, alpha=0.25, linestyle='--')
-    ax1.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+    ax1.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'${x:,.0f}'))
     
     # 2. P&L Distribution (middle left)
     ax2 = fig.add_subplot(gs[1, 0])
-    
-    # Create histogram with color coding
-    n_green = (pnl > 0).sum()
-    n_red = (pnl < 0).sum()
     
     ax2.hist(pnl, bins=80, alpha=0.75, color='mediumseagreen', edgecolor='black', linewidth=0.5)
     ax2.axvline(-var_95, color='darkorange', linestyle='--', linewidth=2.5, 
@@ -223,7 +229,7 @@ def plot_risk_dashboard(
              bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8),
              fontsize=10, fontweight='bold')
     
-    ax2.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+    ax2.xaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'${x:,.0f}'))
     
     # 3. Percentile Bands (middle right)
     ax3 = fig.add_subplot(gs[1, 1])
@@ -250,7 +256,7 @@ def plot_risk_dashboard(
                   fontsize=12, fontweight='bold', pad=10)
     ax3.legend(loc='best', fontsize=8.5, framealpha=0.9)
     ax3.grid(True, alpha=0.25, linestyle='--')
-    ax3.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, p: f'${x:,.0f}'))
+    ax3.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: f'${x:,.0f}'))
     
     # 4. Risk Metrics Table (bottom left)
     ax4 = fig.add_subplot(gs[2, 0])
@@ -462,6 +468,104 @@ def plot_regime_comparison(
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"✓ Regime comparison saved to {save_path}")
+
+    if show:
+        plt.show()
+
+    return fig
+
+
+def plot_rolling_var(
+    rolling_var: pd.DataFrame,
+    current_var_95: float,
+    current_var_99: float,
+    window: int = 60,
+    horizon_days: int = 30,
+    initial_value: float = 1.0,
+    save_path: str | None = None,
+    show: bool = True,
+) -> plt.Figure:
+    """
+    Plot rolling parametric VaR (95% and 99%) over time.
+
+    Shows whether portfolio risk is rising, falling, or historically unusual
+    compared to the current MC estimate. Known crypto stress events are
+    annotated so you can see how the model reacted to real crashes.
+
+    Args:
+        rolling_var:    DataFrame with DatetimeIndex and columns var_95, var_99.
+        current_var_95: Today's MC-based 95% VaR (horizontal reference line).
+        current_var_99: Today's MC-based 99% VaR (horizontal reference line).
+        window:         Rolling look-back window in days (for axis label).
+        horizon_days:   Simulation horizon (for axis label).
+        initial_value:  Starting portfolio value.
+        save_path:      Optional file path to save the figure.
+        show:           Whether to call plt.show().
+    """
+    dates = rolling_var.index
+    if hasattr(dates, 'tz') and dates.tz is not None:
+        dates = dates.tz_localize(None)
+        rolling_var = rolling_var.copy()
+        rolling_var.index = dates
+
+    fig, ax = plt.subplots(figsize=(16, 6))
+
+    # ── Fill between VaR 95 and 99 to highlight uncertainty band ─────
+    ax.fill_between(dates, rolling_var["var_95"], rolling_var["var_99"],
+                    alpha=0.18, color="red", label="VaR 95–99% band")
+
+    # ── Rolling VaR lines ─────────────────────────────────────────────
+    ax.plot(dates, rolling_var["var_95"], color="darkorange", linewidth=1.8,
+            label=f"Rolling VaR 95% ({window}d window)")
+    ax.plot(dates, rolling_var["var_99"], color="darkred", linewidth=1.8,
+            label=f"Rolling VaR 99% ({window}d window)")
+
+    # ── Current MC VaR reference lines ───────────────────────────────
+    ax.axhline(current_var_95, color="darkorange", linestyle="--", linewidth=1.5,
+               alpha=0.75, label=f"Current MC VaR 95%: ${current_var_95:,.0f}")
+    ax.axhline(current_var_99, color="darkred", linestyle="--", linewidth=1.5,
+               alpha=0.75, label=f"Current MC VaR 99%: ${current_var_99:,.0f}")
+
+    # ── Annotate known crash events that fall within the date range ───
+    y_max = rolling_var["var_99"].max()
+    y_min = rolling_var["var_95"].min()
+    y_range = y_max - y_min
+
+    for date_str, label in _CRASH_EVENTS:
+        event_date = pd.Timestamp(date_str)
+        if dates[0] <= event_date <= dates[-1]:
+            ax.axvline(event_date, color="gray", linestyle=":", linewidth=1.2, alpha=0.7)
+            ax.text(event_date, y_max + y_range * 0.04, label,
+                    ha="center", va="bottom", fontsize=7.5, color="gray",
+                    bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.7))
+
+    # ── Shade periods where rolling VaR 99 is in the top quartile ────
+    q75 = rolling_var["var_99"].quantile(0.75)
+    high_risk = rolling_var["var_99"] >= q75
+    ax.fill_between(dates, 0, rolling_var["var_99"],
+                    where=high_risk, alpha=0.07, color="red",
+                    label="Elevated risk periods (top 25%)")
+
+    ax.set_xlabel("Date", fontsize=11, fontweight="bold")
+    ax.set_ylabel(f"{horizon_days}-Day VaR ($)", fontsize=11, fontweight="bold")
+    ax.set_title(
+        f"Rolling {horizon_days}-Day Parametric VaR  —  {window}-Day Look-Back Window\n"
+        f"Starting portfolio: ${initial_value:,.0f}  |  Higher = more risk",
+        fontsize=13, fontweight="bold", pad=12,
+    )
+    ax.legend(fontsize=9, framealpha=0.9, loc="upper left")
+    ax.grid(True, alpha=0.25, linestyle="--")
+    ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda v, _: f"${v:,.0f}"))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b '%y"))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    plt.setp(ax.xaxis.get_majorticklabels(), rotation=30, ha="right")
+
+    plt.tight_layout()
+
+    if save_path:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"✓ Rolling VaR chart saved to {save_path}")
 
     if show:
         plt.show()
