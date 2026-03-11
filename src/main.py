@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import numpy as np
 from pathlib import Path
-from src.data.binance import load_binance_price_data
+from src.data.binance import load_binance_price_data, compute_ewma_params
 from src.simulation.monte_carlo import MCConfig, simulate_correlated_returns, portfolio_path_pnl
 from src.reporting.risk import compute_risk_metrics
 from src.reporting.visualize import plot_simulation_paths, plot_pnl_distribution, plot_risk_dashboard
@@ -18,6 +18,8 @@ def parse_args():
     p.add_argument("--paths", type=int, default=20000, help="Number of Monte Carlo paths")
     p.add_argument("--seed", type=int, default=42, help="Random seed")
     p.add_argument("--initial", type=float, default=1.0, help="Initial portfolio value")
+    p.add_argument("--ewma", type=int, default=0, metavar="SPAN",
+                   help="Use EWMA mu/cov with this span in days (e.g. 60). 0 = flat average")
     p.add_argument("--plot", action="store_true", help="Show visualization plots")
     p.add_argument("--dashboard", action="store_true", help="Show full risk dashboard")
     p.add_argument("--save", type=str, default=None, help="Save plots to directory (e.g., ./reports)")
@@ -30,8 +32,12 @@ def main():
     data = load_binance_price_data(args.tickers, days=args.days_back)
     rets = data.returns
 
-    mu = rets.mean().to_numpy()            # daily mean log return
-    cov = rets.cov().to_numpy()            # daily covariance of log returns
+    if args.ewma > 0:
+        mu, cov = compute_ewma_params(rets, span=args.ewma)
+        print(f"[EWMA] Using exponentially weighted mu/cov (span={args.ewma} days)")
+    else:
+        mu = rets.mean().to_numpy()        # daily mean log return
+        cov = rets.cov().to_numpy()        # daily covariance of log returns
 
     # equal weights
     n_assets = rets.shape[1]

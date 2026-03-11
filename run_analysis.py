@@ -10,10 +10,10 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend to avoid display issues
 
-from src.data.binance import load_binance_price_data
+from src.data.binance import load_binance_price_data, compute_ewma_params
 from src.simulation.monte_carlo import MCConfig, simulate_correlated_returns, portfolio_path_pnl
 from src.reporting.risk import compute_risk_metrics
-from src.reporting.visualize import plot_risk_dashboard
+from src.reporting.visualize import plot_risk_dashboard, plot_regime_comparison
 
 
 def main():
@@ -51,13 +51,18 @@ def main():
     
     print("2️⃣  Computing returns and statistics...")
     rets = data.returns
-    mu = rets.mean().to_numpy()
-    cov = rets.cov().to_numpy()
-    
-    print(f"\n   📈 Daily Mean Returns:")
-    for token, ticker, mean_ret in zip(token_names, tickers, mu):
-        annual_ret = mean_ret * 252 * 100  # Annualized
-        print(f"     {token:12s} ({ticker:10s}): {mean_ret:+.6f} → {annual_ret:+7.2f}% annualized")
+
+    # EWMA parameters adapt to the current market regime (span=60 ≈ 3-month memory)
+    EWMA_SPAN = 60
+    mu, cov = compute_ewma_params(rets, span=EWMA_SPAN)
+    mu_flat = rets.mean().to_numpy()
+    cov_flat = rets.cov().to_numpy()
+
+    print(f"\n   📈 Daily Mean Returns  (EWMA span={EWMA_SPAN}d vs flat {len(rets)}-day avg):")
+    for token, ticker, m_ewma, m_flat in zip(token_names, tickers, mu, mu_flat):
+        ann_ewma = m_ewma * 252 * 100
+        ann_flat = m_flat * 252 * 100
+        print(f"     {token:12s} ({ticker:10s}):  EWMA {ann_ewma:+7.2f}%  |  flat {ann_flat:+7.2f}%  annualized")
     
     print(f"\n   📊 Correlation Matrix:")
     corr = rets.corr()
@@ -79,22 +84,30 @@ def main():
     for token, weight in zip(token_names, weights):
         print(f"     {token:12s}: {weight:.2%}")
     
-    print("\n4️⃣  Running Monte Carlo simulation...")
+    print("\n4️⃣  Running Monte Carlo simulation (flat + EWMA)...")
     initial_value = 100000.0
     config = MCConfig(horizon_days=30, n_paths=20000, seed=42)
+
+    # EWMA simulation (regime-aware)
     sim = simulate_correlated_returns(mu=mu, cov=cov, config=config)
     pnl = portfolio_path_pnl(sim, weights=weights, initial_value=initial_value)
+
+    # Flat simulation (historical baseline) — same seed for fair comparison
+    sim_flat = simulate_correlated_returns(mu=mu_flat, cov=cov_flat, config=config)
+    pnl_flat_sim = portfolio_path_pnl(sim_flat, weights=weights, initial_value=initial_value)
+
     print(f"   ✓ Simulated {config.n_paths:,} paths over {config.horizon_days} days")
     print(f"   ✓ Initial portfolio value: ${initial_value:,.2f}\n")
     
     print("5️⃣  Computing risk metrics...")
     metrics = compute_risk_metrics(pnl)
+    metrics_flat = compute_risk_metrics(pnl_flat_sim)
     
     print("\n" + "="*60)
     print("PORTFOLIO RISK METRICS (30-Day Horizon)")
     print("="*60)
     print(f"\n💰 Expected Performance:")
-    print(f"   Mean P&L:       ${pnl.mean():+.4f}  ({pnl.mean()*100:+.2f}%)")
+    print(f"   Mean P&L:       ${pnl.mean():+.4f}  ({pnl.mean()/initial_value*100:+.2f}%)")
     print(f"   Median P&L:     ${np.median(pnl):+.4f}")
     print(f"   Std Deviation:  ${pnl.std():.4f}")
     
@@ -106,8 +119,8 @@ def main():
     print(f"   Probability of Loss: {(pnl < 0).mean():.2%}")
     
     print(f"\n📊 Extreme Scenarios:")
-    print(f"   Best Case:      ${pnl.max():+.4f}  ({pnl.max()*100:+.2f}%)")
-    print(f"   Worst Case:     ${pnl.min():+.4f}  ({pnl.min()*100:+.2f}%)")
+    print(f"   Best Case:      ${pnl.max():+.4f}  ({pnl.max()/initial_value*100:+.2f}%)")
+    print(f"   Worst Case:     ${pnl.min():+.4f}  ({pnl.min()/initial_value*100:+.2f}%)")
     print(f"   5th Percentile: ${np.percentile(pnl, 5):+.4f}")
     print(f"   95th Percentile: ${np.percentile(pnl, 95):+.4f}")
     
@@ -139,12 +152,12 @@ def main():
         f.write(f"Mean P&L: ${pnl.mean():+.4f}\n")
         f.write(f"Prob(Loss): {(pnl < 0).mean():.2%}\n")
     
-    print("\n6️⃣  Generating risk dashboard visualization...")
+    print("\n6️⃣  Generating visualizations...")
     # Compute portfolio value paths for visualization
     port_log_ret = sim @ weights
     gross = np.exp(port_log_ret)
     portfolio_values = initial_value * np.cumprod(gross, axis=1)
-    
+
     plot_risk_dashboard(
         simulation_df=portfolio_values,
         pnl=pnl,
@@ -154,14 +167,33 @@ def main():
         cvar_99=metrics.cvar_99,
         initial_value=initial_value,
         save_path="reports/portfolio_dashboard.png",
-        show=False,  # Save only, don't try to display
+        show=False,
     )
-    
+
+    plot_regime_comparison(
+        mu_flat=mu_flat,
+        mu_ewma=mu,
+        cov_flat=cov_flat,
+        cov_ewma=cov,
+        pnl_flat=pnl_flat_sim,
+        pnl_ewma=pnl,
+        var_95_flat=metrics_flat.var_95,
+        var_95_ewma=metrics.var_95,
+        var_99_flat=metrics_flat.var_99,
+        var_99_ewma=metrics.var_99,
+        asset_names=token_names,
+        initial_value=initial_value,
+        ewma_span=EWMA_SPAN,
+        save_path="reports/regime_comparison.png",
+        show=False,
+    )
+
     print("\n✅ Analysis Complete!")
     print(f"   💡 Tokens analyzed: {', '.join(token_names)}")
     print(f"   🔑 Data source: Binance API")
     print(f"   📁 Results saved to: reports/portfolio_analysis.txt")
     print(f"   📊 Dashboard saved to: reports/portfolio_dashboard.png")
+    print(f"   📊 Regime comparison saved to: reports/regime_comparison.png")
 
 
 if __name__ == "__main__":

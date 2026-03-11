@@ -89,6 +89,36 @@ def compute_log_returns(prices: pd.DataFrame) -> pd.DataFrame:
     return rets.dropna()
 
 
+def compute_ewma_params(
+    returns: pd.DataFrame,
+    span: int = 60,
+) -> tuple[np.ndarray, np.ndarray]:
+    """
+    Estimate mu and cov using exponentially weighted moments.
+
+    Recent observations get higher weight, so the estimates naturally
+    reflect the current market regime (bull / bear) without needing
+    explicit regime labels.
+
+    Args:
+        returns: Daily log-return DataFrame (rows = days, cols = assets).
+        span:    EWMA half-life in days. ~20 = very reactive, ~60 = 3-month
+                 memory, ~120 = subdued regime sensitivity.
+
+    Returns:
+        mu:  1-D array of EWMA daily mean log-returns (one per asset).
+        cov: 2-D EWMA covariance matrix.
+    """
+    ewm = returns.ewm(span=span, adjust=True)
+    mu = ewm.mean().iloc[-1].to_numpy()
+
+    ewm_cov_full = ewm.cov()
+    last_date = ewm_cov_full.index.get_level_values(0)[-1]
+    cov = ewm_cov_full.loc[last_date].to_numpy()
+
+    return mu, cov
+
+
 def load_binance_price_data(
     symbols: List[str],
     days: int = 730,

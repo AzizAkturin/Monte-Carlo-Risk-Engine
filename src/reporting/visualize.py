@@ -325,8 +325,145 @@ def plot_risk_dashboard(
         Path(save_path).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"✓ Dashboard saved to {save_path}")
-    
+
     if show:
         plt.show()
-    
+
+    return fig
+
+
+def plot_regime_comparison(
+    mu_flat: np.ndarray,
+    mu_ewma: np.ndarray,
+    cov_flat: np.ndarray,
+    cov_ewma: np.ndarray,
+    pnl_flat: np.ndarray,
+    pnl_ewma: np.ndarray,
+    var_95_flat: float,
+    var_95_ewma: float,
+    var_99_flat: float,
+    var_99_ewma: float,
+    asset_names: list[str],
+    initial_value: float = 1.0,
+    ewma_span: int = 60,
+    save_path: str | None = None,
+    show: bool = True,
+) -> plt.Figure:
+    """
+    Three-panel figure showing how EWMA regime-awareness shifts the
+    simulation relative to the flat (equal-weight) historical baseline.
+
+    Panel 1 – Annualised drift per asset (flat vs EWMA)
+    Panel 2 – Annualised volatility per asset (flat vs EWMA)
+    Panel 3 – Overlaid terminal P&L distributions with VaR markers
+    """
+    fig = plt.figure(figsize=(18, 11))
+    gs = fig.add_gridspec(2, 2, hspace=0.38, wspace=0.3)
+
+    ax_drift = fig.add_subplot(gs[0, 0])
+    ax_vol   = fig.add_subplot(gs[0, 1])
+    ax_pnl   = fig.add_subplot(gs[1, :])
+
+    n = len(asset_names)
+    x = np.arange(n)
+    bar_w = 0.35
+
+    # ── Panel 1: Annualised drift ─────────────────────────────────────
+    drift_flat = mu_flat * 252 * 100
+    drift_ewma = mu_ewma * 252 * 100
+
+    bars_f = ax_drift.bar(x - bar_w / 2, drift_flat, bar_w,
+                          label='Flat (full history)', color='steelblue', alpha=0.85)
+    bars_e = ax_drift.bar(x + bar_w / 2, drift_ewma, bar_w,
+                          label=f'EWMA (span={ewma_span}d)', color='darkorange', alpha=0.85)
+
+    ax_drift.axhline(0, color='black', linewidth=0.8, linestyle='--')
+    ax_drift.set_xticks(x)
+    ax_drift.set_xticklabels(asset_names, fontsize=9)
+    ax_drift.set_ylabel('Annualised Return (%)', fontsize=10, fontweight='bold')
+    ax_drift.set_title('Drift: Current Regime vs Long-Run Average',
+                       fontsize=11, fontweight='bold', pad=10)
+    ax_drift.legend(fontsize=9, framealpha=0.9)
+    ax_drift.grid(True, axis='y', alpha=0.25, linestyle='--')
+    ax_drift.yaxis.set_major_formatter(mtick.FuncFormatter(lambda v, _: f'{v:+.1f}%'))
+
+    # Label each bar with its value
+    for bar in list(bars_f) + list(bars_e):
+        h = bar.get_height()
+        ax_drift.text(bar.get_x() + bar.get_width() / 2, h + (1.5 if h >= 0 else -3.5),
+                      f'{h:+.1f}%', ha='center', va='bottom', fontsize=7.5)
+
+    # ── Panel 2: Annualised volatility ────────────────────────────────
+    vol_flat = np.sqrt(np.diag(cov_flat)) * np.sqrt(252) * 100
+    vol_ewma = np.sqrt(np.diag(cov_ewma)) * np.sqrt(252) * 100
+
+    bars_vf = ax_vol.bar(x - bar_w / 2, vol_flat, bar_w,
+                         label='Flat (full history)', color='steelblue', alpha=0.85)
+    bars_ve = ax_vol.bar(x + bar_w / 2, vol_ewma, bar_w,
+                         label=f'EWMA (span={ewma_span}d)', color='darkorange', alpha=0.85)
+
+    ax_vol.set_xticks(x)
+    ax_vol.set_xticklabels(asset_names, fontsize=9)
+    ax_vol.set_ylabel('Annualised Volatility (%)', fontsize=10, fontweight='bold')
+    ax_vol.set_title('Volatility: Current Regime vs Long-Run Average',
+                     fontsize=11, fontweight='bold', pad=10)
+    ax_vol.legend(fontsize=9, framealpha=0.9)
+    ax_vol.grid(True, axis='y', alpha=0.25, linestyle='--')
+    ax_vol.yaxis.set_major_formatter(mtick.FuncFormatter(lambda v, _: f'{v:.1f}%'))
+
+    for bar in list(bars_vf) + list(bars_ve):
+        h = bar.get_height()
+        ax_vol.text(bar.get_x() + bar.get_width() / 2, h + 0.5,
+                    f'{h:.1f}%', ha='center', va='bottom', fontsize=7.5)
+
+    # ── Panel 3: Overlaid P&L distributions ──────────────────────────
+    pnl_min = min(pnl_flat.min(), pnl_ewma.min())
+    pnl_max = max(pnl_flat.max(), pnl_ewma.max())
+    bins = np.linspace(pnl_min, pnl_max, 100)
+
+    ax_pnl.hist(pnl_flat, bins=bins, alpha=0.45, color='steelblue',
+                label='Flat (full history)', density=True)
+    ax_pnl.hist(pnl_ewma, bins=bins, alpha=0.45, color='darkorange',
+                label=f'EWMA (span={ewma_span}d)', density=True)
+
+    # VaR markers for both
+    ax_pnl.axvline(-var_95_flat, color='steelblue', linestyle='--', linewidth=2,
+                   label=f'VaR 95% flat: ${var_95_flat:,.0f}')
+    ax_pnl.axvline(-var_95_ewma, color='darkorange', linestyle='--', linewidth=2,
+                   label=f'VaR 95% EWMA: ${var_95_ewma:,.0f}')
+    ax_pnl.axvline(-var_99_flat, color='steelblue', linestyle=':', linewidth=2,
+                   label=f'VaR 99% flat: ${var_99_flat:,.0f}')
+    ax_pnl.axvline(-var_99_ewma, color='darkorange', linestyle=':', linewidth=2,
+                   label=f'VaR 99% EWMA: ${var_99_ewma:,.0f}')
+    ax_pnl.axvline(0, color='black', linewidth=1.2, alpha=0.6)
+
+    # Annotate shift in expected P&L
+    delta_mean = pnl_ewma.mean() - pnl_flat.mean()
+    ax_pnl.text(0.01, 0.97,
+                f'EWMA mean P&L shift vs flat: ${delta_mean:+,.0f}',
+                transform=ax_pnl.transAxes, va='top', fontsize=10, fontweight='bold',
+                bbox=dict(boxstyle='round', facecolor='lightyellow', alpha=0.9))
+
+    ax_pnl.set_xlabel('Terminal Profit / Loss ($)', fontsize=11, fontweight='bold')
+    ax_pnl.set_ylabel('Density', fontsize=11, fontweight='bold')
+    ax_pnl.set_title('P&L Distribution: How Regime-Awareness Shifts the Simulation',
+                     fontsize=12, fontweight='bold', pad=10)
+    ax_pnl.legend(fontsize=9, framealpha=0.9, ncol=2)
+    ax_pnl.grid(True, alpha=0.25, linestyle='--')
+    ax_pnl.xaxis.set_major_formatter(mtick.FuncFormatter(lambda v, _: f'${v:,.0f}'))
+
+    plt.suptitle(
+        f'Regime Comparison — Flat (full history) vs EWMA (recent {ewma_span} days)\n'
+        f'Starting portfolio: ${initial_value:,.0f}',
+        fontsize=14, fontweight='bold', y=1.01,
+    )
+
+    if save_path:
+        Path(save_path).parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"✓ Regime comparison saved to {save_path}")
+
+    if show:
+        plt.show()
+
     return fig

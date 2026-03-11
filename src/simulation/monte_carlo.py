@@ -19,7 +19,9 @@ def simulate_correlated_returns(
 ) -> np.ndarray:
     rng = np.random.default_rng(config.seed)
     n_assets = len(mu)
-    L = np.linalg.cholesky(cov)
+    # Small regularization to handle near-singular covariance (e.g. stablecoins)
+    cov_reg = cov + 1e-10 * np.eye(n_assets)
+    L = np.linalg.cholesky(cov_reg)
     z = rng.standard_normal(size = (config.n_paths, config.horizon_days, n_assets))
     correlated = z @ L.T
     simulated = correlated + mu
