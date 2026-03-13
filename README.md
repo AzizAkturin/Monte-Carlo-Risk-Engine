@@ -1,4 +1,4 @@
-# 🎲 Monte Carlo Risk Engine
+# 🎲 Monte Carlo Risk Engine in Bull/Bear Market
 
 A professional Python-based Monte Carlo simulation tool for cryptocurrency portfolio risk analysis. Simulates correlated multi-asset price paths and generates comprehensive risk reports with interactive visualizations.
 
